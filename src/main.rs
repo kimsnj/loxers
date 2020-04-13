@@ -2,6 +2,7 @@ use std::io::Write;
 
 use anyhow::{Context, Result};
 
+mod ast;
 mod error;
 mod scanner;
 mod token;
