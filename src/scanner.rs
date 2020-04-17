@@ -200,11 +200,6 @@ impl Scanner {
             self.advance_token()?;
         }
 
-        self.tokens.push(Token {
-            kind: TokenKind::EOF,
-            lexeme: "".into(),
-            line: self.line,
-        });
         Ok(self.tokens.clone())
     }
 }

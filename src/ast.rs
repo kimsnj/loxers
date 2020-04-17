@@ -1,23 +1,25 @@
 use crate::token::Token;
 use std::fmt::{self, Debug};
 
-enum Expr {
-    Grouping(Box<Expr>),
+pub(crate) enum Expr {
     StringLit(String),
     NumberLit(f64),
+    BoolLit(bool),
+    Nil,
+    Grouping(Box<Expr>),
     Unary(Box<Unary>),
     Binary(Box<Binary>),
 }
 
-struct Unary {
-    operator: Token,
-    right: Expr,
+pub(crate) struct Unary {
+    pub operator: Token,
+    pub right: Expr,
 }
 
-struct Binary {
-    operator: Token,
-    left: Expr,
-    right: Expr,
+pub(crate) struct Binary {
+    pub operator: Token,
+    pub left: Expr,
+    pub right: Expr,
 }
 
 impl Debug for Unary {
@@ -44,11 +46,13 @@ impl Debug for Expr {
         use Expr::*;
 
         match self {
-            Grouping(e) => formatter.debug_tuple("").field(e).finish(),
+            Grouping(e) => e.fmt(formatter),
             StringLit(s) => formatter.write_str(s),
             NumberLit(n) => formatter.write_fmt(format_args!("{}", n)),
             Unary(u) => u.fmt(formatter),
             Binary(b) => b.fmt(formatter),
+            BoolLit(b) => b.fmt(formatter),
+            Nil => formatter.write_str("<nil>"),
         }
     }
 }

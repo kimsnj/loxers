@@ -4,6 +4,7 @@ use anyhow::{Context, Result};
 
 mod ast;
 mod error;
+mod parser;
 mod scanner;
 mod token;
 
@@ -12,9 +13,9 @@ struct Interpreter {}
 
 impl Interpreter {
     fn run(&self, source: &str) -> Result<()> {
-        for token in scanner::Scanner::new(source.into()).scan_tokens()?.iter() {
-            println!("{:?}", token);
-        }
+        let tokens = scanner::Scanner::new(source.into()).scan_tokens()?;
+        let expr = parser::Parser::new(tokens).run()?;
+        println!("{:#?}", expr);
         Ok(())
     }
 
