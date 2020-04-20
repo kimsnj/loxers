@@ -1,4 +1,4 @@
-use crate::ast::{self, Expr};
+use crate::ast::{self, Expr, Stmt};
 use crate::error::LoxError;
 use crate::token::Token;
 use crate::token::TokenKind as tk;
@@ -8,7 +8,9 @@ pub(crate) struct Parser {
     last_line: usize,
 }
 
-type ParseRes = Result<Expr, LoxError>;
+type ParseRes = Result<Vec<Stmt>, LoxError>;
+type StmtRes = Result<Stmt, LoxError>;
+type ExprRes = Result<Expr, LoxError>;
 
 impl Parser {
     pub fn new(mut tokens: Vec<Token>) -> Self {
@@ -18,16 +20,40 @@ impl Parser {
     }
 
     pub fn run(&mut self) -> ParseRes {
-        self.expression()
+        let mut res = Vec::new();
+        while !self.tokens.is_empty() {
+            res.push(self.statement()?);
+        }
+        Ok(res)
     }
 
-    fn expression(&mut self) -> ParseRes {
+    fn statement(&mut self) -> StmtRes {
+        match self.peek() {
+            tk::Print => self.print_stmt(),
+            _ => self.expr_stmt(),
+        }
+    }
+
+    fn print_stmt(&mut self) -> StmtRes {
+        self.expect(tk::Print)?;
+        let value = self.expression()?;
+        self.expect(tk::Semicolon)?;
+        Ok(Stmt::Print(value))
+    }
+
+    fn expr_stmt(&mut self) -> StmtRes {
+        let expr = self.expression()?;
+        self.expect(tk::Semicolon)?;
+        Ok(Stmt::Expression(expr))
+    }
+
+    fn expression(&mut self) -> ExprRes {
         self.equality()
     }
 
-    fn binary_op<F>(&mut self, operands: F, operators: &[tk]) -> ParseRes
+    fn binary_op<F>(&mut self, operands: F, operators: &[tk]) -> ExprRes
     where
-        F: Fn(&mut Self) -> ParseRes,
+        F: Fn(&mut Self) -> ExprRes,
     {
         let mut expr = operands(self)?;
         while let Some(operator) = self.matches(operators) {
@@ -40,26 +66,26 @@ impl Parser {
         Ok(expr)
     }
 
-    fn equality(&mut self) -> ParseRes {
+    fn equality(&mut self) -> ExprRes {
         self.binary_op(Self::comparison, &[tk::BangEqual, tk::EqualEqual])
     }
 
-    fn comparison(&mut self) -> ParseRes {
+    fn comparison(&mut self) -> ExprRes {
         self.binary_op(
             Self::addition,
             &[tk::Greater, tk::GreaterEqual, tk::Less, tk::LessEqual],
         )
     }
 
-    fn addition(&mut self) -> ParseRes {
+    fn addition(&mut self) -> ExprRes {
         self.binary_op(Self::multiplication, &[tk::Plus, tk::Minus])
     }
 
-    fn multiplication(&mut self) -> ParseRes {
+    fn multiplication(&mut self) -> ExprRes {
         self.binary_op(Self::unary, &[tk::Star, tk::Slash])
     }
 
-    fn unary(&mut self) -> ParseRes {
+    fn unary(&mut self) -> ExprRes {
         if let Some(operator) = self.matches(&[tk::Bang, tk::Minus]) {
             Ok(Expr::Unary(Box::new(ast::Unary {
                 operator,
@@ -70,7 +96,7 @@ impl Parser {
         }
     }
 
-    fn primary(&mut self) -> ParseRes {
+    fn primary(&mut self) -> ExprRes {
         let next = self.advance();
         match next.kind {
             tk::Number(n) => Ok(Expr::NumberLit(n)),
@@ -118,7 +144,7 @@ impl Parser {
             Ok(())
         } else {
             Err(LoxError {
-                message: "Expected ')'".into(),
+                message: format!("Expected {:?}", kind),
                 line: 0,
                 location: "".into(),
             })
@@ -130,33 +156,56 @@ impl Parser {
 mod tests {
     use super::*;
 
-    fn to_parsed(expr: &str) -> Result<String, LoxError> {
+    fn to_parsed_expr(expr: &str) -> Result<String, LoxError> {
         let tokens = crate::scanner::Scanner::new(expr.into()).scan_tokens()?;
+        let ast = Parser::new(tokens).expression()?;
+        Ok(format!("{:?}", ast))
+    }
+
+    fn to_parsed_program(program: &str) -> Result<String, LoxError> {
+        let tokens = crate::scanner::Scanner::new(program.into()).scan_tokens()?;
         let ast = Parser::new(tokens).run()?;
         Ok(format!("{:?}", ast))
     }
 
     #[test]
     fn parse_expr() {
-        assert_eq!("+(1, 2)", &to_parsed("1 + 2").unwrap());
-        assert_eq!("-(-(1, *(2, 3)), 2)", &to_parsed("1 - 2 * 3 - 2").unwrap());
+        assert_eq!("+(1, 2)", &to_parsed_expr("1 + 2").unwrap());
+        assert_eq!(
+            "-(-(1, *(2, 3)), 2)",
+            &to_parsed_expr("1 - 2 * 3 - 2").unwrap()
+        );
         assert_eq!(
             "*(-(1, 2), -(3, 2))",
-            &to_parsed("(1 - 2) * (3 - 2)").unwrap()
+            &to_parsed_expr("(1 - 2) * (3 - 2)").unwrap()
         );
         assert_eq!(
             "==(+(+(1, 2), 6), -(*(5, 2), 1))",
-            &to_parsed("1 + 2 + 6 == 5 * 2 - 1").unwrap()
+            &to_parsed_expr("1 + 2 + 6 == 5 * 2 - 1").unwrap()
         );
     }
 
     #[test]
     fn parse_expr_err() {
-        assert_eq!("Unexpected token", &to_parsed("1 +").unwrap_err().message);
         assert_eq!(
             "Unexpected token",
-            &to_parsed("1 - * 3 - 2").unwrap_err().message
+            &to_parsed_expr("1 +").unwrap_err().message
         );
-        assert_eq!("Expected ')'", &to_parsed("(1 - 2 3").unwrap_err().message);
+        assert_eq!(
+            "Unexpected token",
+            &to_parsed_expr("1 - * 3 - 2").unwrap_err().message
+        );
+        assert_eq!(
+            "Expected RightParen",
+            &to_parsed_expr("(1 - 2 3").unwrap_err().message
+        );
+    }
+
+    #[test]
+    fn parse() {
+        assert_eq!(
+            "[print(+(1, 2))]",
+            &to_parsed_program("print 1 + 2;").unwrap()
+        );
     }
 }

@@ -12,9 +12,8 @@ mod value;
 
 fn run(source: &str) -> Result<()> {
     let tokens = scanner::Scanner::new(source.into()).scan_tokens()?;
-    let expr = parser::Parser::new(tokens).run()?;
-    println!("{}", interpreter::Interpreter::evaluate(expr)?);
-    Ok(())
+    let stmts = parser::Parser::new(tokens).run()?;
+    interpreter::Interpreter::execute(stmts).map_err(|e| e.into())
 }
 
 fn run_prompt() -> Result<()> {

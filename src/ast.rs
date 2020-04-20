@@ -1,6 +1,11 @@
 use crate::token::Token;
 use std::fmt::{self, Debug};
 
+pub(crate) enum Stmt {
+    Expression(Expr),
+    Print(Expr),
+}
+
 pub(crate) enum Expr {
     StringLit(String),
     NumberLit(f64),
@@ -53,6 +58,17 @@ impl Debug for Expr {
             Binary(b) => b.fmt(formatter),
             BoolLit(b) => b.fmt(formatter),
             Nil => formatter.write_str("<nil>"),
+        }
+    }
+}
+
+impl Debug for Stmt {
+    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        use Stmt::*;
+
+        match self {
+            Expression(e) => e.fmt(formatter),
+            Print(e) => formatter.debug_tuple("print").field(e).finish(),
         }
     }
 }

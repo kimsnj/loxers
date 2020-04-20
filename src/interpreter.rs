@@ -1,15 +1,31 @@
-use crate::ast::{self, Expr};
+use crate::ast::{self, Expr, Stmt};
 use crate::error::LoxError;
 use crate::token::TokenKind;
 use crate::value::Value;
 use std::convert::TryInto;
 use std::ops::{Add, Div, Mul, Sub};
 
-type RuntimeRes = Result<Value, crate::error::LoxError>;
+type EvaluationRes = Result<Value, crate::error::LoxError>;
+type RuntimeRes = Result<(), crate::error::LoxError>;
 pub(crate) struct Interpreter {}
 
 impl Interpreter {
-    pub fn evaluate(expr: Expr) -> RuntimeRes {
+    pub fn execute(stmts: Vec<Stmt>) -> RuntimeRes {
+        for s in stmts.into_iter() {
+            match s {
+                Stmt::Expression(e) => {
+                    Self::evaluate(e)?;
+                }
+                Stmt::Print(e) => {
+                    let value = Self::evaluate(e)?;
+                    println!("{}", value);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    pub fn evaluate(expr: Expr) -> EvaluationRes {
         match expr {
             Expr::StringLit(_) | Expr::NumberLit(_) | Expr::BoolLit(_) | Expr::Nil => {
                 Ok(expr.into())
@@ -20,7 +36,7 @@ impl Interpreter {
         }
     }
 
-    fn evaluate_unary(unary: ast::Unary) -> RuntimeRes {
+    fn evaluate_unary(unary: ast::Unary) -> EvaluationRes {
         let operator = unary.operator;
         let right = Self::evaluate(unary.right)?;
         match operator.kind {
@@ -36,7 +52,7 @@ impl Interpreter {
         }
     }
 
-    fn evaluate_binary(binary: ast::Binary) -> RuntimeRes {
+    fn evaluate_binary(binary: ast::Binary) -> EvaluationRes {
         use Value::*;
 
         let operator = binary.operator;
