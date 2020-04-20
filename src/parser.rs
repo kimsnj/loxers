@@ -22,15 +22,39 @@ impl Parser {
     pub fn run(&mut self) -> ParseRes {
         let mut res = Vec::new();
         while !self.tokens.is_empty() {
-            res.push(self.statement()?);
+            res.push(self.declaration()?);
         }
         Ok(res)
+    }
+
+    fn declaration(&mut self) -> StmtRes {
+        match self.peek() {
+            tk::Var => self.var_declaration(),
+            _ => self.statement(),
+        }
     }
 
     fn statement(&mut self) -> StmtRes {
         match self.peek() {
             tk::Print => self.print_stmt(),
             _ => self.expr_stmt(),
+        }
+    }
+
+    fn var_declaration(&mut self) -> StmtRes {
+        self.expect(tk::Var)?;
+        let name = self.advance();
+        match name.kind {
+            tk::Identifier => {
+                let init = if let Some(_) = self.matches(&[tk::Equal]) {
+                    Some(self.expression()?)
+                } else {
+                    None
+                };
+                self.expect(tk::Semicolon)?;
+                Ok(Stmt::Var(ast::VarDeclaration { name, init }))
+            }
+            _ => Err(LoxError::new("Expected variable name".into(), &name)),
         }
     }
 
@@ -46,9 +70,25 @@ impl Parser {
         self.expect(tk::Semicolon)?;
         Ok(Stmt::Expression(expr))
     }
-
     fn expression(&mut self) -> ExprRes {
-        self.equality()
+        self.assignment()
+    }
+
+    fn assignment(&mut self) -> ExprRes {
+        let expr = self.equality()?;
+        if let Some(t) = self.matches(&[tk::Equal]) {
+            let value = self.assignment()?;
+            if let Expr::Variable(ident) = expr {
+                Ok(Expr::Assign(Box::new(ast::Assignment {
+                    name: ident,
+                    expr: value,
+                })))
+            } else {
+                Err(LoxError::new("Invalid assignment target".into(), &t))
+            }
+        } else {
+            Ok(expr)
+        }
     }
 
     fn binary_op<F>(&mut self, operands: F, operators: &[tk]) -> ExprRes
@@ -104,6 +144,7 @@ impl Parser {
             tk::False => Ok(Expr::BoolLit(false)),
             tk::True => Ok(Expr::BoolLit(true)),
             tk::Nil => Ok(Expr::Nil),
+            tk::Identifier => Ok(Expr::Variable(next)),
             tk::LeftParen => {
                 let expr = Expr::Grouping(Box::new(self.expression()?));
                 self.expect(tk::RightParen)?;
@@ -206,6 +247,11 @@ mod tests {
         assert_eq!(
             "[print(+(1, 2))]",
             &to_parsed_program("print 1 + 2;").unwrap()
+        );
+
+        assert_eq!(
+            "[var(\"a\", None), var(\"b\", Some(3))]",
+            &to_parsed_program("var a; var b = 3;").unwrap()
         );
     }
 }

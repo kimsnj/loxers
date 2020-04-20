@@ -2,43 +2,62 @@ use crate::ast::{self, Expr, Stmt};
 use crate::error::LoxError;
 use crate::token::TokenKind;
 use crate::value::Value;
+use std::collections::HashMap;
 use std::convert::TryInto;
 use std::ops::{Add, Div, Mul, Sub};
 
 type EvaluationRes = Result<Value, crate::error::LoxError>;
 type RuntimeRes = Result<(), crate::error::LoxError>;
-pub(crate) struct Interpreter {}
+#[derive(Default)]
+pub(crate) struct Interpreter {
+    env: Environment,
+}
 
 impl Interpreter {
-    pub fn execute(stmts: Vec<Stmt>) -> RuntimeRes {
+    pub fn execute(&mut self, stmts: Vec<Stmt>) -> RuntimeRes {
         for s in stmts.into_iter() {
             match s {
                 Stmt::Expression(e) => {
-                    Self::evaluate(e)?;
+                    self.evaluate(e)?;
                 }
                 Stmt::Print(e) => {
-                    let value = Self::evaluate(e)?;
+                    let value = self.evaluate(e)?;
                     println!("{}", value);
+                }
+                Stmt::Var(v) => {
+                    let value = self.evaluate(v.init.unwrap_or(Expr::Nil))?;
+                    self.env.declare(v.name.lexeme, value);
                 }
             }
         }
         Ok(())
     }
 
-    pub fn evaluate(expr: Expr) -> EvaluationRes {
+    pub fn evaluate(&mut self, expr: Expr) -> EvaluationRes {
         match expr {
             Expr::StringLit(_) | Expr::NumberLit(_) | Expr::BoolLit(_) | Expr::Nil => {
                 Ok(expr.into())
             }
-            Expr::Grouping(e) => Self::evaluate(*e),
-            Expr::Unary(unary) => Self::evaluate_unary(*unary),
-            Expr::Binary(binary) => Self::evaluate_binary(*binary),
+            Expr::Grouping(e) => self.evaluate(*e),
+            Expr::Unary(unary) => self.evaluate_unary(*unary),
+            Expr::Binary(binary) => self.evaluate_binary(*binary),
+            Expr::Variable(t) => self
+                .env
+                .get(&t.lexeme)
+                .ok_or_else(|| LoxError::new("unknown variable".into(), &t)),
+            Expr::Assign(a) => {
+                let name = a.name;
+                let value = self.evaluate(a.expr)?;
+                self.env
+                    .assign(&name.lexeme, value)
+                    .ok_or_else(|| LoxError::new("Unknown variable".into(), &name))
+            }
         }
     }
 
-    fn evaluate_unary(unary: ast::Unary) -> EvaluationRes {
+    fn evaluate_unary(&mut self, unary: ast::Unary) -> EvaluationRes {
         let operator = unary.operator;
-        let right = Self::evaluate(unary.right)?;
+        let right = self.evaluate(unary.right)?;
         match operator.kind {
             TokenKind::Minus => {
                 let right: f64 = right.try_into().map_err(|e: LoxError| e.enrich(operator))?;
@@ -52,12 +71,12 @@ impl Interpreter {
         }
     }
 
-    fn evaluate_binary(binary: ast::Binary) -> EvaluationRes {
+    fn evaluate_binary(&mut self, binary: ast::Binary) -> EvaluationRes {
         use Value::*;
 
         let operator = binary.operator;
-        let left = Self::evaluate(binary.left)?;
-        let right = Self::evaluate(binary.right)?;
+        let left = self.evaluate(binary.left)?;
+        let right = self.evaluate(binary.right)?;
         match operator.kind {
             TokenKind::Greater
             | TokenKind::GreaterEqual
@@ -114,5 +133,26 @@ fn num_op(kind: TokenKind) -> impl Fn(f64, f64) -> f64 {
         TokenKind::Slash => f64::div,
         TokenKind::Star => f64::mul,
         _ => unreachable!(),
+    }
+}
+
+#[derive(Debug, Default)]
+struct Environment {
+    values: HashMap<String, Value>,
+}
+
+impl Environment {
+    fn declare(&mut self, name: String, value: Value) {
+        self.values.insert(name, value);
+    }
+
+    fn get(&self, name: &str) -> Option<Value> {
+        self.values.get(name).cloned()
+    }
+
+    fn assign(&mut self, name: &str, value: Value) -> Option<Value> {
+        let v = self.values.get_mut(name)?;
+        *v = value.clone();
+        Some(value)
     }
 }

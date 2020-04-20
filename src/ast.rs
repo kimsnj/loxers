@@ -4,6 +4,12 @@ use std::fmt::{self, Debug};
 pub(crate) enum Stmt {
     Expression(Expr),
     Print(Expr),
+    Var(VarDeclaration),
+}
+
+pub(crate) struct VarDeclaration {
+    pub name: Token,
+    pub init: Option<Expr>,
 }
 
 pub(crate) enum Expr {
@@ -14,6 +20,8 @@ pub(crate) enum Expr {
     Grouping(Box<Expr>),
     Unary(Box<Unary>),
     Binary(Box<Binary>),
+    Variable(Token),
+    Assign(Box<Assignment>),
 }
 
 pub(crate) struct Unary {
@@ -25,6 +33,11 @@ pub(crate) struct Binary {
     pub operator: Token,
     pub left: Expr,
     pub right: Expr,
+}
+
+pub(crate) struct Assignment {
+    pub name: Token,
+    pub expr: Expr,
 }
 
 impl Debug for Unary {
@@ -46,19 +59,41 @@ impl Debug for Binary {
     }
 }
 
+impl Debug for Assignment {
+    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter
+            .debug_tuple("=")
+            .field(&self.name.lexeme)
+            .field(&self.expr)
+            .finish()
+    }
+}
+
 impl Debug for Expr {
     fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
         use Expr::*;
 
         match self {
             Grouping(e) => e.fmt(formatter),
-            StringLit(s) => formatter.write_str(s),
+            StringLit(s) => s.fmt(formatter),
             NumberLit(n) => formatter.write_fmt(format_args!("{}", n)),
             Unary(u) => u.fmt(formatter),
             Binary(b) => b.fmt(formatter),
             BoolLit(b) => b.fmt(formatter),
             Nil => formatter.write_str("<nil>"),
+            Variable(t) => formatter.write_str(&t.lexeme),
+            Assign(a) => a.fmt(formatter),
         }
+    }
+}
+
+impl Debug for VarDeclaration {
+    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter
+            .debug_tuple("var")
+            .field(&self.name.lexeme)
+            .field(&self.init)
+            .finish()
     }
 }
 
@@ -69,6 +104,7 @@ impl Debug for Stmt {
         match self {
             Expression(e) => e.fmt(formatter),
             Print(e) => formatter.debug_tuple("print").field(e).finish(),
+            Var(v) => v.fmt(formatter),
         }
     }
 }

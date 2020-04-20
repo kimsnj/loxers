@@ -147,7 +147,7 @@ impl Scanner {
         KEYWORDS
             .get(value.as_str())
             .cloned()
-            .unwrap_or(TokenKind::Identifier(value))
+            .unwrap_or(TokenKind::Identifier)
     }
 
     fn advance_token(&mut self) -> Result<(), LoxError> {

@@ -10,27 +10,33 @@ mod scanner;
 mod token;
 mod value;
 
-fn run(source: &str) -> Result<()> {
+use interpreter::Interpreter;
+
+fn run(interpreter: &mut Interpreter, source: &str) -> Result<()> {
     let tokens = scanner::Scanner::new(source.into()).scan_tokens()?;
     let stmts = parser::Parser::new(tokens).run()?;
-    interpreter::Interpreter::execute(stmts).map_err(|e| e.into())
+    interpreter.execute(stmts).map_err(|e| e.into())
 }
 
 fn run_prompt() -> Result<()> {
+    let mut interpreter = Interpreter::default();
     loop {
         print!("> ");
         let mut s = String::new();
         std::io::stdout().flush()?;
         std::io::stdin().read_line(&mut s)?;
-        if let Err(e) = run(&s) {
+        if let Err(e) = run(&mut interpreter, &s) {
             eprintln!("{}", e);
         }
     }
 }
 
 fn run_file(input: &str) -> Result<()> {
-    run(&std::fs::read_to_string(input)
-        .with_context(|| format!("failed to open script file {}", input))?)
+    run(
+        &mut Interpreter::default(),
+        &std::fs::read_to_string(input)
+            .with_context(|| format!("failed to open script file {}", input))?,
+    )
 }
 
 fn main() -> Result<()> {

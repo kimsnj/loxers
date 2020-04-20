@@ -24,7 +24,7 @@ pub(crate) enum TokenKind {
     LessEqual,
 
     // Literals.
-    Identifier(String),
+    Identifier,
     StringLiteral(String),
     Number(f64),
 
