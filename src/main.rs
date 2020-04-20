@@ -1,6 +1,6 @@
-use std::io::Write;
-
 use anyhow::{Context, Result};
+use rustyline::error::ReadlineError;
+use rustyline::Editor;
 
 mod ast;
 mod error;
@@ -19,14 +19,21 @@ fn run(interpreter: &mut Interpreter, source: &str) -> Result<()> {
 }
 
 fn run_prompt() -> Result<()> {
+    let mut rl = Editor::<()>::new();
     let mut interpreter = Interpreter::default();
     loop {
-        print!("> ");
-        let mut s = String::new();
-        std::io::stdout().flush()?;
-        std::io::stdin().read_line(&mut s)?;
-        if let Err(e) = run(&mut interpreter, &s) {
-            eprintln!("{}", e);
+        match rl.readline(">> ") {
+            Ok(line) => {
+                rl.add_history_entry(line.as_str());
+                if let Err(e) = run(&mut interpreter, line.as_str()) {
+                    eprintln!("{}", e);
+                }
+            }
+            Err(ReadlineError::Interrupted) | Err(ReadlineError::Eof) => {
+                println!("Goodbye!");
+                break Ok(());
+            }
+            Err(e) => break Err(e.into()),
         }
     }
 }
