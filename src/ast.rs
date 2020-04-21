@@ -5,6 +5,7 @@ pub(crate) enum Stmt {
     Expression(Expr),
     Print(Expr),
     Var(VarDeclaration),
+    Block(Vec<Stmt>),
 }
 
 pub(crate) struct VarDeclaration {
@@ -105,6 +106,7 @@ impl Debug for Stmt {
             Expression(e) => e.fmt(formatter),
             Print(e) => formatter.debug_tuple("print").field(e).finish(),
             Var(v) => v.fmt(formatter),
+            Block(stmts) => stmts.fmt(formatter),
         }
     }
 }

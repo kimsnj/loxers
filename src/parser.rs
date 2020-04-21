@@ -37,8 +37,19 @@ impl Parser {
     fn statement(&mut self) -> StmtRes {
         match self.peek() {
             tk::Print => self.print_stmt(),
+            tk::LeftBrace => self.block(),
             _ => self.expr_stmt(),
         }
+    }
+
+    fn block(&mut self) -> StmtRes {
+        self.expect(tk::LeftBrace)?;
+        let mut stmts = Vec::new();
+        while self.peek() != tk::RightBrace && self.peek() != tk::EOF {
+            stmts.push(self.declaration()?);
+        }
+        self.expect(tk::RightBrace)?;
+        Ok(Stmt::Block(stmts))
     }
 
     fn var_declaration(&mut self) -> StmtRes {
@@ -70,6 +81,7 @@ impl Parser {
         self.expect(tk::Semicolon)?;
         Ok(Stmt::Expression(expr))
     }
+
     fn expression(&mut self) -> ExprRes {
         self.assignment()
     }
@@ -252,6 +264,11 @@ mod tests {
         assert_eq!(
             "[var(\"a\", None), var(\"b\", Some(3))]",
             &to_parsed_program("var a; var b = 3;").unwrap()
+        );
+
+        assert_eq!(
+            "[[1, print(3)]]",
+            &to_parsed_program("{1;print 3;}").unwrap()
         );
     }
 }

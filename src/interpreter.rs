@@ -28,6 +28,11 @@ impl Interpreter {
                     let value = self.evaluate(v.init.unwrap_or(Expr::Nil))?;
                     self.env.declare(v.name.lexeme, value);
                 }
+                Stmt::Block(stmts) => {
+                    self.env.enter_scope();
+                    self.execute(stmts)?;
+                    self.env.exit_scope();
+                }
             }
         }
         Ok(())
@@ -136,23 +141,52 @@ fn num_op(kind: TokenKind) -> impl Fn(f64, f64) -> f64 {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 struct Environment {
-    values: HashMap<String, Value>,
+    scopes: Vec<HashMap<String, Value>>,
+}
+
+impl Default for Environment {
+    fn default() -> Self {
+        Self {
+            scopes: vec![HashMap::new()],
+        }
+    }
 }
 
 impl Environment {
     fn declare(&mut self, name: String, value: Value) {
-        self.values.insert(name, value);
+        self.scopes
+            .iter_mut()
+            .last()
+            .expect("no scope found")
+            .insert(name, value);
     }
 
     fn get(&self, name: &str) -> Option<Value> {
-        self.values.get(name).cloned()
+        self.scopes
+            .iter()
+            .rev()
+            .flat_map(|m| m.get(name).cloned())
+            .next()
     }
 
     fn assign(&mut self, name: &str, value: Value) -> Option<Value> {
-        let v = self.values.get_mut(name)?;
+        let v = self
+            .scopes
+            .iter_mut()
+            .rev()
+            .flat_map(|m| m.get_mut(name))
+            .next()?;
         *v = value.clone();
         Some(value)
+    }
+
+    fn enter_scope(&mut self) {
+        self.scopes.push(HashMap::new());
+    }
+
+    fn exit_scope(&mut self) {
+        self.scopes.pop();
     }
 }
