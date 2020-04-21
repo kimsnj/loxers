@@ -1,6 +1,6 @@
 use crate::ast::{self, Expr, Stmt};
 use crate::error::LoxError;
-use crate::token::TokenKind;
+use crate::token::{Token, TokenKind};
 use crate::value::Value;
 use std::collections::HashMap;
 use std::convert::TryInto;
@@ -46,17 +46,8 @@ impl Interpreter {
             Expr::Grouping(e) => self.evaluate(*e),
             Expr::Unary(unary) => self.evaluate_unary(*unary),
             Expr::Binary(binary) => self.evaluate_binary(*binary),
-            Expr::Variable(t) => self
-                .env
-                .get(&t.lexeme)
-                .ok_or_else(|| LoxError::new("unknown variable".into(), &t)),
-            Expr::Assign(a) => {
-                let name = a.name;
-                let value = self.evaluate(a.expr)?;
-                self.env
-                    .assign(&name.lexeme, value)
-                    .ok_or_else(|| LoxError::new("Unknown variable".into(), &name))
-            }
+            Expr::Variable(t) => self.read_var(&t),
+            Expr::Assign(a) => self.evaluate_assignment(&a.name, a.expr),
         }
     }
 
@@ -115,6 +106,19 @@ impl Interpreter {
             },
             _ => unreachable!(),
         }
+    }
+
+    fn read_var(&self, t: &Token) -> EvaluationRes {
+        self.env
+            .get(&t.lexeme)
+            .ok_or_else(|| LoxError::new("unknown variable".into(), &t))
+    }
+
+    fn evaluate_assignment(&mut self, name: &Token, expr: Expr) -> EvaluationRes {
+        let value = self.evaluate(expr)?;
+        self.env
+            .assign(&name.lexeme, value)
+            .ok_or_else(|| LoxError::new("Unknown variable".into(), &name))
     }
 }
 
