@@ -15,23 +15,32 @@ pub(crate) struct Interpreter {
 
 impl Interpreter {
     pub fn execute(&mut self, stmts: Vec<Stmt>) -> RuntimeRes {
-        for s in stmts.into_iter() {
-            match s {
-                Stmt::Expression(e) => {
-                    self.evaluate(e)?;
-                }
-                Stmt::Print(e) => {
-                    let value = self.evaluate(e)?;
-                    println!("{}", value);
-                }
-                Stmt::Var(v) => {
-                    let value = self.evaluate(v.init.unwrap_or(Expr::Nil))?;
-                    self.env.declare(v.name.lexeme, value);
-                }
-                Stmt::Block(stmts) => {
-                    self.env.enter_scope();
-                    self.execute(stmts)?;
-                    self.env.exit_scope();
+        stmts.into_iter().map(|s| self.execute_single(s)).collect()
+    }
+
+    fn execute_single(&mut self, stmt: Stmt) -> RuntimeRes {
+        match stmt {
+            Stmt::Expression(e) => {
+                self.evaluate(e)?;
+            }
+            Stmt::Print(e) => {
+                let value = self.evaluate(e)?;
+                println!("{}", value);
+            }
+            Stmt::Var(v) => {
+                let value = self.evaluate(v.init.unwrap_or(Expr::Nil))?;
+                self.env.declare(v.name.lexeme, value);
+            }
+            Stmt::Block(stmts) => {
+                self.env.enter_scope();
+                self.execute(stmts)?;
+                self.env.exit_scope();
+            }
+            Stmt::If(if_) => {
+                if self.evaluate(if_.condition)?.try_into()? {
+                    self.execute_single(if_.then_branch)?;
+                } else if let Some(else_stmt) = if_.else_branch {
+                    self.execute_single(else_stmt)?;
                 }
             }
         }
@@ -46,6 +55,7 @@ impl Interpreter {
             Expr::Grouping(e) => self.evaluate(*e),
             Expr::Unary(unary) => self.evaluate_unary(*unary),
             Expr::Binary(binary) => self.evaluate_binary(*binary),
+            Expr::Logical(binary) => self.evaluate_logical(*binary),
             Expr::Variable(t) => self.read_var(&t),
             Expr::Assign(a) => self.evaluate_assignment(&a.name, a.expr),
         }
@@ -64,6 +74,19 @@ impl Interpreter {
                 Ok(Value::Boolean(!right))
             }
             _ => unreachable!(),
+        }
+    }
+    fn evaluate_logical(&mut self, binary: ast::Binary) -> EvaluationRes {
+        let operator = binary.operator;
+        assert!(operator.kind == TokenKind::Or || operator.kind == TokenKind::And);
+
+        let left = self.evaluate(binary.left)?;
+        let is_truthy: bool = left.clone().try_into()?;
+
+        if operator.kind == TokenKind::Or && is_truthy {
+            Ok(left)
+        } else {
+            self.evaluate(binary.right)
         }
     }
 

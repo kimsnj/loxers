@@ -6,11 +6,18 @@ pub(crate) enum Stmt {
     Print(Expr),
     Var(VarDeclaration),
     Block(Vec<Stmt>),
+    If(Box<If>),
 }
 
 pub(crate) struct VarDeclaration {
     pub name: Token,
     pub init: Option<Expr>,
+}
+
+pub(crate) struct If {
+    pub condition: Expr,
+    pub then_branch: Stmt,
+    pub else_branch: Option<Stmt>,
 }
 
 pub(crate) enum Expr {
@@ -21,6 +28,7 @@ pub(crate) enum Expr {
     Grouping(Box<Expr>),
     Unary(Box<Unary>),
     Binary(Box<Binary>),
+    Logical(Box<Binary>),
     Variable(Token),
     Assign(Box<Assignment>),
 }
@@ -80,6 +88,7 @@ impl Debug for Expr {
             NumberLit(n) => formatter.write_fmt(format_args!("{}", n)),
             Unary(u) => u.fmt(formatter),
             Binary(b) => b.fmt(formatter),
+            Logical(b) => b.fmt(formatter),
             BoolLit(b) => b.fmt(formatter),
             Nil => formatter.write_str("<nil>"),
             Variable(t) => formatter.write_str(&t.lexeme),
@@ -98,6 +107,17 @@ impl Debug for VarDeclaration {
     }
 }
 
+impl Debug for If {
+    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        let mut debug = formatter.debug_tuple("if");
+        debug.field(&self.condition).field(&self.then_branch);
+        if let Some(else_stmt) = &self.else_branch {
+            debug.field(else_stmt);
+        }
+        debug.finish()
+    }
+}
+
 impl Debug for Stmt {
     fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
         use Stmt::*;
@@ -107,6 +127,7 @@ impl Debug for Stmt {
             Print(e) => formatter.debug_tuple("print").field(e).finish(),
             Var(v) => v.fmt(formatter),
             Block(stmts) => stmts.fmt(formatter),
+            If(if_stmt) => if_stmt.fmt(formatter),
         }
     }
 }

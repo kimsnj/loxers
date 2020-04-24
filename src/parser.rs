@@ -38,6 +38,7 @@ impl Parser {
         match self.peek() {
             tk::Print => self.print_stmt(),
             tk::LeftBrace => self.block(),
+            tk::If => self.if_stmt(),
             _ => self.expr_stmt(),
         }
     }
@@ -76,6 +77,24 @@ impl Parser {
         Ok(Stmt::Print(value))
     }
 
+    fn if_stmt(&mut self) -> StmtRes {
+        self.expect(tk::If)?;
+        self.expect(tk::LeftParen)?;
+        let condition = self.expression()?;
+        self.expect(tk::RightParen)?;
+        let then_branch = self.statement()?;
+        let else_branch = if self.matches(&[tk::Else]).is_some() {
+            Some(self.statement()?)
+        } else {
+            None
+        };
+        Ok(Stmt::If(Box::new(ast::If {
+            condition,
+            then_branch,
+            else_branch,
+        })))
+    }
+
     fn expr_stmt(&mut self) -> StmtRes {
         let expr = self.expression()?;
         self.expect(tk::Semicolon)?;
@@ -87,7 +106,7 @@ impl Parser {
     }
 
     fn assignment(&mut self) -> ExprRes {
-        let expr = self.equality()?;
+        let expr = self.or()?;
         if let Some(t) = self.matches(&[tk::Equal]) {
             let value = self.assignment()?;
             if let Expr::Variable(ident) = expr {
@@ -116,6 +135,29 @@ impl Parser {
             }))
         }
         Ok(expr)
+    }
+
+    fn logical_op<F>(&mut self, operands: F, operators: &[tk]) -> ExprRes
+    where
+        F: Fn(&mut Self) -> ExprRes,
+    {
+        let mut expr = operands(self)?;
+        while let Some(operator) = self.matches(operators) {
+            expr = Expr::Logical(Box::new(ast::Binary {
+                left: expr,
+                operator,
+                right: operands(self)?,
+            }))
+        }
+        Ok(expr)
+    }
+
+    fn or(&mut self) -> ExprRes {
+        self.logical_op(Self::and, &[tk::Or])
+    }
+
+    fn and(&mut self) -> ExprRes {
+        self.logical_op(Self::equality, &[tk::And])
     }
 
     fn equality(&mut self) -> ExprRes {
@@ -236,6 +278,10 @@ mod tests {
             "==(+(+(1, 2), 6), -(*(5, 2), 1))",
             &to_parsed_expr("1 + 2 + 6 == 5 * 2 - 1").unwrap()
         );
+        assert_eq!(
+            "=(\"a\", or(true, and(false, <nil>)))",
+            &to_parsed_expr("a = true or false and nil").unwrap()
+        );
     }
 
     #[test]
@@ -269,6 +315,11 @@ mod tests {
         assert_eq!(
             "[[1, print(3)]]",
             &to_parsed_program("{1;print 3;}").unwrap()
+        );
+
+        assert_eq!(
+            "[if(true, print(1), if(<nil>, print(2), print(3)))]",
+            &to_parsed_program("if(true) print 1; else if (nil) print 2; else print 3;").unwrap()
         );
     }
 }
