@@ -3,9 +3,11 @@ use crate::callable;
 use crate::error::{ControlFlow, LoxError};
 use crate::token::{Token, TokenKind};
 use crate::value::Value;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::ops::{Add, Div, Mul, Sub};
+use std::rc::Rc;
 
 type RuntimeRes = Result<(), LoxError>;
 type ControlFlowRes = Result<(), ControlFlow>;
@@ -17,12 +19,8 @@ pub(crate) struct Interpreter {
 }
 
 impl Interpreter {
-    fn new_with_globals(&self) -> Self {
-        Self {
-            env: Environment {
-                scopes: vec![self.env.scopes[0].clone()],
-            },
-        }
+    pub fn with_environment(env: Environment) -> Self {
+        Self { env }
     }
 
     pub fn execute(&mut self, stmts: &[Stmt]) -> RuntimeRes {
@@ -69,7 +67,13 @@ impl Interpreter {
                 }
             }
             Stmt::Function(f) => {
-                self.env.declare(&f.name, Value::from(f.as_ref()));
+                self.env.declare(
+                    &f.name,
+                    Value::from(callable::Function {
+                        environment: self.env.clone(),
+                        declaration: f.as_ref().clone(),
+                    }),
+                );
             }
             Stmt::Return(r) => {
                 return Err(ControlFlow::Return(
@@ -112,11 +116,7 @@ impl Interpreter {
                 .map(|e| self.evaluate(&e))
                 .collect::<Result<_, _>>()?;
 
-            let mut interpreter = self.new_with_globals();
-            self.env.enter_scope();
-            let res = func.call(&mut interpreter, args);
-            self.env.exit_scope();
-            res.map_err(|e| e.into())
+            func.call(args).map_err(|e| e.into())
         }
     }
 
@@ -229,10 +229,11 @@ fn num_op(kind: &TokenKind) -> impl Fn(f64, f64) -> f64 {
 }
 
 type Assignments = HashMap<String, Value>;
+type Scope = Rc<RefCell<Assignments>>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct Environment {
-    scopes: Vec<Assignments>,
+    scopes: Vec<Scope>,
 }
 
 impl Default for Environment {
@@ -244,10 +245,10 @@ impl Default for Environment {
 }
 
 impl Environment {
-    fn init_globals() -> Assignments {
+    fn init_globals() -> Scope {
         let mut m = HashMap::new();
         m.insert("clock".to_string(), callable::Clock::value());
-        m
+        Rc::new(RefCell::new(m))
     }
 
     pub fn declare(&mut self, name: &str, value: Value) {
@@ -255,6 +256,7 @@ impl Environment {
             .iter_mut()
             .last()
             .expect("no scope found")
+            .borrow_mut()
             .insert(name.into(), value);
     }
 
@@ -262,23 +264,22 @@ impl Environment {
         self.scopes
             .iter()
             .rev()
-            .flat_map(|m| m.get(name).cloned())
+            .flat_map(|m| m.borrow().get(name).cloned())
             .next()
     }
 
     fn assign(&mut self, name: &str, value: Value) -> Option<Value> {
-        let v = self
-            .scopes
-            .iter_mut()
-            .rev()
-            .flat_map(|m| m.get_mut(name))
-            .next()?;
-        *v = value.clone();
-        Some(value)
+        for scope in self.scopes.iter_mut().rev() {
+            if let Some(v) = scope.borrow_mut().get_mut(name) {
+                *v = value.clone();
+                return Some(value);
+            }
+        }
+        None
     }
 
-    fn enter_scope(&mut self) {
-        self.scopes.push(HashMap::new());
+    pub fn enter_scope(&mut self) {
+        self.scopes.push(Rc::new(RefCell::new(Assignments::new())));
     }
 
     fn exit_scope(&mut self) {

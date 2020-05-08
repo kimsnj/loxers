@@ -1,5 +1,5 @@
-use crate::ast::{self, Expr};
-use crate::callable::Callable;
+use crate::ast::Expr;
+use crate::callable::{self, Callable};
 use crate::error::LoxError;
 use std::convert::{From, TryFrom};
 use std::rc::Rc;
@@ -76,9 +76,9 @@ impl From<&Expr> for Value {
     }
 }
 
-impl From<&ast::Function> for Value {
-    fn from(f: &ast::Function) -> Self {
-        Value::Callable(std::rc::Rc::new(f.clone()))
+impl From<callable::Function> for Value {
+    fn from(f: callable::Function) -> Self {
+        Value::Callable(std::rc::Rc::new(f))
     }
 }
 

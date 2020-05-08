@@ -1,11 +1,12 @@
+use crate::ast;
 use crate::error::{ControlFlow, LoxError};
-use crate::interpreter::Interpreter;
+use crate::interpreter::{Environment, Interpreter};
 use crate::value::Value;
 use std::rc::Rc;
 pub(crate) trait Callable {
     fn arity(&self) -> usize;
     fn name(&self) -> &str;
-    fn call(&self, interpreter: &mut Interpreter, args: Vec<Value>) -> Result<Value, LoxError>;
+    fn call(&self, args: Vec<Value>) -> Result<Value, LoxError>;
 }
 
 pub(crate) struct Clock;
@@ -25,7 +26,7 @@ impl Callable for Clock {
         0
     }
 
-    fn call(&self, _: &mut Interpreter, _: Vec<Value>) -> Result<Value, LoxError> {
+    fn call(&self, _: Vec<Value>) -> Result<Value, LoxError> {
         use std::time::SystemTime;
         Ok(Value::Number(
             SystemTime::now()
@@ -36,20 +37,28 @@ impl Callable for Clock {
     }
 }
 
-impl Callable for crate::ast::Function {
+pub(crate) struct Function {
+    pub declaration: ast::Function,
+    pub environment: Environment,
+}
+
+impl Callable for Function {
     fn arity(&self) -> usize {
-        self.params.len()
+        self.declaration.params.len()
     }
 
     fn name(&self) -> &str {
-        &self.name
+        &self.declaration.name
     }
 
-    fn call(&self, interpreter: &mut Interpreter, args: Vec<Value>) -> Result<Value, LoxError> {
-        for (name, value) in self.params.iter().zip(args.into_iter()) {
+    fn call(&self, args: Vec<Value>) -> Result<Value, LoxError> {
+        let mut interpreter = Interpreter::with_environment(self.environment.clone());
+        interpreter.env.enter_scope();
+
+        for (name, value) in self.declaration.params.iter().zip(args.into_iter()) {
             interpreter.env.declare(&name.lexeme, value);
         }
-        match interpreter.execute_stmts(&self.body) {
+        match interpreter.execute_stmts(&self.declaration.body) {
             Ok(()) => Ok(Value::Nil),
             Err(ControlFlow::Return(_, v)) => Ok(v),
             Err(ControlFlow::Error(e)) => Err(e),
