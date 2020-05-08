@@ -1,25 +1,36 @@
 use crate::token::Token;
 use std::fmt::{self, Debug};
 
+#[derive(Clone)]
 pub(crate) enum Stmt {
     Expression(Expr),
     Print(Expr),
     Var(VarDeclaration),
     Block(Vec<Stmt>),
     If(Box<If>),
+    While(Box<While>),
 }
 
+#[derive(Clone)]
 pub(crate) struct VarDeclaration {
     pub name: Token,
     pub init: Option<Expr>,
 }
 
+#[derive(Clone)]
 pub(crate) struct If {
     pub condition: Expr,
     pub then_branch: Stmt,
     pub else_branch: Option<Stmt>,
 }
 
+#[derive(Clone)]
+pub(crate) struct While {
+    pub condition: Expr,
+    pub body: Stmt,
+}
+
+#[derive(Clone)]
 pub(crate) enum Expr {
     StringLit(String),
     NumberLit(f64),
@@ -33,17 +44,20 @@ pub(crate) enum Expr {
     Assign(Box<Assignment>),
 }
 
+#[derive(Clone)]
 pub(crate) struct Unary {
     pub operator: Token,
     pub right: Expr,
 }
 
+#[derive(Clone)]
 pub(crate) struct Binary {
     pub operator: Token,
     pub left: Expr,
     pub right: Expr,
 }
 
+#[derive(Clone)]
 pub(crate) struct Assignment {
     pub name: Token,
     pub expr: Expr,
@@ -107,6 +121,16 @@ impl Debug for VarDeclaration {
     }
 }
 
+impl Debug for While {
+    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter
+            .debug_tuple("while")
+            .field(&self.condition)
+            .field(&self.body)
+            .finish()
+    }
+}
+
 impl Debug for If {
     fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
         let mut debug = formatter.debug_tuple("if");
@@ -128,6 +152,7 @@ impl Debug for Stmt {
             Var(v) => v.fmt(formatter),
             Block(stmts) => stmts.fmt(formatter),
             If(if_stmt) => if_stmt.fmt(formatter),
+            While(while_stmt) => while_stmt.fmt(formatter),
         }
     }
 }

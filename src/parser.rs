@@ -39,6 +39,8 @@ impl Parser {
             tk::Print => self.print_stmt(),
             tk::LeftBrace => self.block(),
             tk::If => self.if_stmt(),
+            tk::While => self.while_stmt(),
+            tk::For => self.for_stmt(),
             _ => self.expr_stmt(),
         }
     }
@@ -93,6 +95,50 @@ impl Parser {
             then_branch,
             else_branch,
         })))
+    }
+
+    fn while_stmt(&mut self) -> StmtRes {
+        self.expect(tk::While)?;
+        self.expect(tk::LeftParen)?;
+        let condition = self.expression()?;
+        self.expect(tk::RightParen)?;
+        let body = self.statement()?;
+        Ok(Stmt::While(Box::new(ast::While { condition, body })))
+    }
+
+    fn for_stmt(&mut self) -> StmtRes {
+        self.expect(tk::For)?;
+
+        self.expect(tk::LeftParen)?;
+        let initialization = match self.peek() {
+            tk::Var => Some(self.var_declaration()?),
+            tk::Semicolon => {
+                self.advance();
+                None
+            }
+            _ => Some(self.expr_stmt()?),
+        };
+
+        let condition = self.expression()?;
+        self.expect(tk::Semicolon)?;
+
+        let increment = if self.peek() == tk::Semicolon {
+            self.advance();
+            None
+        } else {
+            Some(Stmt::Expression(self.expression()?))
+        };
+        self.expect(tk::RightParen)?;
+
+        let body = self.statement()?;
+        let nil_statement = Stmt::Expression(Expr::Nil);
+        Ok(Stmt::Block(vec![
+            initialization.unwrap_or(nil_statement.clone()),
+            Stmt::While(Box::new(ast::While {
+                condition,
+                body: Stmt::Block(vec![body, increment.unwrap_or(nil_statement)]),
+            })),
+        ]))
     }
 
     fn expr_stmt(&mut self) -> StmtRes {

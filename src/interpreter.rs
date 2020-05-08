@@ -43,6 +43,11 @@ impl Interpreter {
                     self.execute_single(else_stmt)?;
                 }
             }
+            Stmt::While(while_) => {
+                while self.evaluate(while_.condition.clone())?.try_into()? {
+                    self.execute_single(while_.body.clone())?;
+                }
+            }
         }
         Ok(())
     }
