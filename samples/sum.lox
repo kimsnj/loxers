@@ -1,0 +1,12 @@
+fun sum(n) {
+    var sum = 0;
+    while (n > 0) {
+        sum = sum + n;
+        n = n - 1;
+    }
+    return sum;
+}
+
+print sum(10);
+print sum(100);
+

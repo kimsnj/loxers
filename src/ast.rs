@@ -9,6 +9,8 @@ pub(crate) enum Stmt {
     Block(Vec<Stmt>),
     If(Box<If>),
     While(Box<While>),
+    Function(Box<Function>),
+    Return(Box<Return>),
 }
 
 #[derive(Clone)]
@@ -23,11 +25,21 @@ pub(crate) struct If {
     pub then_branch: Stmt,
     pub else_branch: Option<Stmt>,
 }
-
 #[derive(Clone)]
 pub(crate) struct While {
     pub condition: Expr,
     pub body: Stmt,
+}
+#[derive(Clone)]
+pub(crate) struct Function {
+    pub name: String,
+    pub params: Vec<Token>,
+    pub body: Vec<Stmt>,
+}
+#[derive(Clone)]
+pub(crate) struct Return {
+    pub keyword: Token,
+    pub value: Expr,
 }
 
 #[derive(Clone)]
@@ -42,6 +54,7 @@ pub(crate) enum Expr {
     Logical(Box<Binary>),
     Variable(Token),
     Assign(Box<Assignment>),
+    Call(Box<Call>),
 }
 
 #[derive(Clone)]
@@ -61,6 +74,13 @@ pub(crate) struct Binary {
 pub(crate) struct Assignment {
     pub name: Token,
     pub expr: Expr,
+}
+
+#[derive(Clone)]
+pub(crate) struct Call {
+    pub callee: Expr,
+    pub paren: Token,
+    pub args: Vec<Expr>,
 }
 
 impl Debug for Unary {
@@ -92,6 +112,20 @@ impl Debug for Assignment {
     }
 }
 
+impl Debug for Call {
+    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        if self.args.is_empty() {
+            formatter.write_fmt(format_args!("{:?}()", self.callee))
+        } else {
+            let mut tuple = formatter.debug_tuple(&format!("{:?}", self.callee));
+            for arg in &self.args {
+                tuple.field(&arg);
+            }
+            tuple.finish()
+        }
+    }
+}
+
 impl Debug for Expr {
     fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
         use Expr::*;
@@ -107,6 +141,7 @@ impl Debug for Expr {
             Nil => formatter.write_str("<nil>"),
             Variable(t) => formatter.write_str(&t.lexeme),
             Assign(a) => a.fmt(formatter),
+            Call(c) => c.fmt(formatter),
         }
     }
 }
@@ -142,6 +177,23 @@ impl Debug for If {
     }
 }
 
+impl Debug for Function {
+    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        let mut debug = formatter.debug_tuple(&self.name);
+        for param in self.params.iter() {
+            debug.field(&param.lexeme);
+        }
+        debug.field(&self.body);
+        debug.finish()
+    }
+}
+
+impl Debug for Return {
+    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.debug_tuple("return").field(&self.value).finish()
+    }
+}
+
 impl Debug for Stmt {
     fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
         use Stmt::*;
@@ -153,6 +205,8 @@ impl Debug for Stmt {
             Block(stmts) => stmts.fmt(formatter),
             If(if_stmt) => if_stmt.fmt(formatter),
             While(while_stmt) => while_stmt.fmt(formatter),
+            Function(f) => f.fmt(formatter),
+            Return(r) => r.fmt(formatter),
         }
     }
 }

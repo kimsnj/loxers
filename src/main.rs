@@ -3,6 +3,7 @@ use rustyline::error::ReadlineError;
 use rustyline::Editor;
 
 mod ast;
+mod callable;
 mod error;
 mod interpreter;
 mod parser;
@@ -15,7 +16,7 @@ use interpreter::Interpreter;
 fn run(interpreter: &mut Interpreter, source: &str) -> Result<()> {
     let tokens = scanner::Scanner::new(source.into()).scan_tokens()?;
     let stmts = parser::Parser::new(tokens).run()?;
-    interpreter.execute(stmts).map_err(|e| e.into())
+    interpreter.execute(&stmts).map_err(|e| e.into())
 }
 
 fn run_prompt() -> Result<()> {

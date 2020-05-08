@@ -30,6 +30,7 @@ impl Parser {
     fn declaration(&mut self) -> StmtRes {
         match self.peek() {
             tk::Var => self.var_declaration(),
+            tk::Fun => self.fun_declaration(),
             _ => self.statement(),
         }
     }
@@ -41,18 +42,23 @@ impl Parser {
             tk::If => self.if_stmt(),
             tk::While => self.while_stmt(),
             tk::For => self.for_stmt(),
+            tk::Return => self.return_stmt(),
             _ => self.expr_stmt(),
         }
     }
 
-    fn block(&mut self) -> StmtRes {
+    fn block_stmts(&mut self) -> Result<Vec<Stmt>, LoxError> {
         self.expect(tk::LeftBrace)?;
         let mut stmts = Vec::new();
         while self.peek() != tk::RightBrace && self.peek() != tk::EOF {
             stmts.push(self.declaration()?);
         }
         self.expect(tk::RightBrace)?;
-        Ok(Stmt::Block(stmts))
+        Ok(stmts)
+    }
+
+    fn block(&mut self) -> StmtRes {
+        self.block_stmts().map(|s| Stmt::Block(s))
     }
 
     fn var_declaration(&mut self) -> StmtRes {
@@ -70,6 +76,30 @@ impl Parser {
             }
             _ => Err(LoxError::new("Expected variable name".into(), &name)),
         }
+    }
+
+    fn fun_declaration(&mut self) -> StmtRes {
+        self.expect(tk::Fun)?;
+        let name = self.expect(tk::Identifier)?;
+        self.expect(tk::LeftParen)?;
+        let mut params = Vec::new();
+        if self.peek() != tk::RightParen {
+            loop {
+                params.push(self.expect(tk::Identifier)?);
+                if self.matches(&[tk::Comma]).is_none() {
+                    break;
+                }
+            }
+        }
+        self.expect(tk::RightParen)?;
+        let body = self.block_stmts()?;
+        Ok(Stmt::Function({
+            Box::new(ast::Function {
+                name: name.lexeme,
+                params,
+                body,
+            })
+        }))
     }
 
     fn print_stmt(&mut self) -> StmtRes {
@@ -139,6 +169,16 @@ impl Parser {
                 body: Stmt::Block(vec![body, increment.unwrap_or(nil_statement)]),
             })),
         ]))
+    }
+
+    fn return_stmt(&mut self) -> StmtRes {
+        let keyword = self.expect(tk::Return)?;
+        let mut value = Expr::Nil;
+        if self.matches(&[tk::Semicolon]).is_none() {
+            value = self.expression()?;
+            self.expect(tk::Semicolon)?;
+        }
+        Ok(Stmt::Return(Box::new(ast::Return { keyword, value })))
     }
 
     fn expr_stmt(&mut self) -> StmtRes {
@@ -232,8 +272,34 @@ impl Parser {
                 right: self.unary()?,
             })))
         } else {
-            self.primary()
+            self.call()
         }
+    }
+
+    fn call(&mut self) -> ExprRes {
+        let mut expr = self.primary()?;
+        while self.matches(&[tk::LeftParen]).is_some() {
+            expr = self.finish_call(expr)?;
+        }
+        Ok(expr)
+    }
+
+    fn finish_call(&mut self, callee: Expr) -> ExprRes {
+        let mut args = Vec::new();
+        if self.peek() != tk::RightParen {
+            loop {
+                args.push(self.expression()?);
+                if self.matches(&[tk::Comma]).is_none() {
+                    break;
+                }
+            }
+        }
+        let paren = self.expect(tk::RightParen)?;
+        Ok(Expr::Call(Box::new(ast::Call {
+            callee,
+            args,
+            paren,
+        })))
     }
 
     fn primary(&mut self) -> ExprRes {
@@ -280,15 +346,12 @@ impl Parser {
         })
     }
 
-    fn expect(&mut self, kind: tk) -> Result<(), LoxError> {
-        if self.advance().kind == kind {
-            Ok(())
+    fn expect(&mut self, kind: tk) -> Result<Token, LoxError> {
+        let token = self.advance();
+        if token.kind == kind {
+            Ok(token)
         } else {
-            Err(LoxError {
-                message: format!("Expected {:?}", kind),
-                line: 0,
-                location: "".into(),
-            })
+            Err(LoxError::new(format!("Expected {:?}", kind), &token))
         }
     }
 }
@@ -328,6 +391,10 @@ mod tests {
             "=(\"a\", or(true, and(false, <nil>)))",
             &to_parsed_expr("a = true or false and nil").unwrap()
         );
+        assert_eq!(
+            "hello()(42, <nil>)",
+            &to_parsed_expr("hello()(42, nil)").unwrap()
+        );
     }
 
     #[test]
@@ -366,6 +433,11 @@ mod tests {
         assert_eq!(
             "[if(true, print(1), if(<nil>, print(2), print(3)))]",
             &to_parsed_program("if(true) print 1; else if (nil) print 2; else print 3;").unwrap()
+        );
+
+        assert_eq!(
+            "[printTwice(\"a\", [print(a), print(a)])]",
+            &to_parsed_program("fun printTwice(a) { print(a); print(a); }").unwrap()
         );
     }
 }

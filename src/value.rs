@@ -1,13 +1,16 @@
-use crate::ast::Expr;
+use crate::ast::{self, Expr};
+use crate::callable::Callable;
 use crate::error::LoxError;
 use std::convert::{From, TryFrom};
+use std::rc::Rc;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone)]
 pub(crate) enum Value {
     Nil,
     Boolean(bool),
     Number(f64),
     String(String),
+    Callable(Rc<dyn Callable>),
 }
 
 impl std::fmt::Display for Value {
@@ -23,6 +26,27 @@ impl std::fmt::Display for Value {
                 f.write_str(&s)
             }
             Value::String(s) => f.write_str(s),
+            Value::Callable(c) => f.write_fmt(format_args!("<callable {}>", c.name())),
+        }
+    }
+}
+
+impl std::fmt::Debug for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("{}", self))
+    }
+}
+
+impl std::cmp::PartialEq for Value {
+    fn eq(&self, other: &Value) -> bool {
+        use Value::*;
+        match (self, other) {
+            (Nil, Nil) => true,
+            (Boolean(b1), Boolean(b2)) => b1 == b2,
+            (Number(n1), Number(n2)) => n1 == n2,
+            (String(s1), String(s2)) => s1 == s2,
+            (Callable(fp1), Callable(fp2)) => Rc::ptr_eq(fp1, fp2),
+            (_, _) => false,
         }
     }
 }
@@ -38,17 +62,23 @@ impl std::cmp::PartialOrd for Value {
     }
 }
 
-impl From<Expr> for Value {
+impl From<&Expr> for Value {
     /// Converts literal to values
     /// Panics if called with non-literals
-    fn from(literal: Expr) -> Self {
+    fn from(literal: &Expr) -> Self {
         match literal {
-            Expr::StringLit(s) => Value::String(s),
-            Expr::NumberLit(n) => Value::Number(n),
-            Expr::BoolLit(b) => Value::Boolean(b),
+            Expr::StringLit(s) => Value::String(s.clone()),
+            Expr::NumberLit(n) => Value::Number(*n),
+            Expr::BoolLit(b) => Value::Boolean(*b),
             Expr::Nil => Value::Nil,
             _ => panic!("Conversion limited to literal values"),
         }
+    }
+}
+
+impl From<&ast::Function> for Value {
+    fn from(f: &ast::Function) -> Self {
+        Value::Callable(std::rc::Rc::new(f.clone()))
     }
 }
 
@@ -58,7 +88,7 @@ impl TryFrom<Value> for f64 {
         if let Value::Number(n) = value {
             Ok(n)
         } else {
-            Err(LoxError::msg(format!("Expected number found: {:?}", value)))
+            Err(LoxError::msg(format!("Expected number found: {}", value)))
         }
     }
 }
@@ -69,7 +99,7 @@ impl TryFrom<Value> for String {
         if let Value::String(s) = value {
             Ok(s)
         } else {
-            Err(LoxError::msg(format!("Expected string found: {:?}", value)))
+            Err(LoxError::msg(format!("Expected string found: {}", value)))
         }
     }
 }
@@ -80,10 +110,18 @@ impl TryFrom<Value> for bool {
         match value {
             Value::Boolean(b) => Ok(b),
             Value::Nil => Ok(false),
-            _ => Err(LoxError::msg(format!(
-                "Expected boolean found: {:?}",
-                value
-            ))),
+            _ => Err(LoxError::msg(format!("Expected boolean found: {}", value))),
+        }
+    }
+}
+
+impl<'a> TryFrom<&'a Value> for &'a dyn Callable {
+    type Error = LoxError;
+    fn try_from(value: &'a Value) -> Result<Self, Self::Error> {
+        if let Value::Callable(c) = value {
+            Ok(c.as_ref())
+        } else {
+            Err(LoxError::msg(format!("Expected callable found: {}", value)))
         }
     }
 }
