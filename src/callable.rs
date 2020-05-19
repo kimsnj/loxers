@@ -1,6 +1,6 @@
 use crate::ast;
 use crate::error::{ControlFlow, LoxError};
-use crate::interpreter::{Environment, Interpreter};
+use crate::interpreter::Interpreter;
 use crate::value::Value;
 use std::rc::Rc;
 pub(crate) trait Callable {
@@ -38,8 +38,8 @@ impl Callable for Clock {
 }
 
 pub(crate) struct Function {
-    pub declaration: ast::Function,
-    pub environment: Environment,
+    pub declaration: Rc<ast::Function>,
+    pub interpreter: Interpreter,
 }
 
 impl Callable for Function {
@@ -52,7 +52,7 @@ impl Callable for Function {
     }
 
     fn call(&self, args: Vec<Value>) -> Result<Value, LoxError> {
-        let mut interpreter = Interpreter::with_environment(self.environment.clone());
+        let mut interpreter = self.interpreter.clone();
         interpreter.env.enter_scope();
 
         for (name, value) in self.declaration.params.iter().zip(args.into_iter()) {

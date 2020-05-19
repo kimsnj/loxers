@@ -1,5 +1,6 @@
 use crate::token::Token;
 use std::fmt::{self, Debug};
+use std::rc::Rc;
 
 #[derive(Clone)]
 pub(crate) enum Stmt {
@@ -9,7 +10,7 @@ pub(crate) enum Stmt {
     Block(Vec<Stmt>),
     If(Box<If>),
     While(Box<While>),
-    Function(Box<Function>),
+    Function(Rc<Function>),
     Return(Box<Return>),
 }
 

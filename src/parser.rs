@@ -2,6 +2,7 @@ use crate::ast::{self, Expr, Stmt};
 use crate::error::LoxError;
 use crate::token::Token;
 use crate::token::TokenKind as tk;
+use std::rc::Rc;
 
 pub(crate) struct Parser {
     tokens: Vec<Token>,
@@ -94,7 +95,7 @@ impl Parser {
         self.expect(tk::RightParen)?;
         let body = self.block_stmts()?;
         Ok(Stmt::Function({
-            Box::new(ast::Function {
+            Rc::new(ast::Function {
                 name: name.lexeme,
                 params,
                 body,

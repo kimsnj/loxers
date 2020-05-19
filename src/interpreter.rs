@@ -12,18 +12,18 @@ use std::rc::Rc;
 type RuntimeRes = Result<(), LoxError>;
 type ControlFlowRes = Result<(), ControlFlow>;
 type EvaluationRes = Result<Value, ControlFlow>;
+type Bindings = HashMap<*const Token, usize>;
+type BindingsVec = Vec<(*const Token, usize)>;
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub(crate) struct Interpreter {
     pub env: Environment,
+    bindings: Bindings,
 }
 
 impl Interpreter {
-    pub fn with_environment(env: Environment) -> Self {
-        Self { env }
-    }
-
-    pub fn execute(&mut self, stmts: &[Stmt]) -> RuntimeRes {
+    pub fn execute(&mut self, stmts: &[Stmt], bindings: BindingsVec) -> RuntimeRes {
+        self.bindings.extend(bindings.into_iter());
         self.execute_stmts(stmts).map_err(|e| match e {
             ControlFlow::Error(e) => e,
             ControlFlow::Return(t, v) => {
@@ -51,7 +51,7 @@ impl Interpreter {
             }
             Stmt::Block(stmts) => {
                 self.env.enter_scope();
-                self.execute(stmts)?;
+                self.execute_stmts(stmts)?;
                 self.env.exit_scope();
             }
             Stmt::If(if_) => {
@@ -70,8 +70,8 @@ impl Interpreter {
                 self.env.declare(
                     &f.name,
                     Value::from(callable::Function {
-                        environment: self.env.clone(),
-                        declaration: f.as_ref().clone(),
+                        interpreter: self.clone(),
+                        declaration: Rc::clone(f),
                     }),
                 );
             }
@@ -193,15 +193,24 @@ impl Interpreter {
 
     fn read_var(&self, t: &Token) -> EvaluationRes {
         self.env
-            .get(&t.lexeme)
+            .get(&t.lexeme, self.level(t))
             .ok_or_else(|| LoxError::new("unknown variable".into(), &t).into())
     }
 
     fn evaluate_assignment(&mut self, name: &Token, expr: &Expr) -> EvaluationRes {
         let value = self.evaluate(expr)?;
         self.env
-            .assign(&name.lexeme, value)
+            .assign(&name.lexeme, self.level(name), value)
             .ok_or_else(|| LoxError::new("Unknown variable".into(), &name).into())
+    }
+
+    /// Can panic as resolver should be exhaustive
+    fn level(&self, t: &Token) -> usize {
+        let ptr: *const Token = t;
+        self.bindings
+            .get(&ptr)
+            .cloned()
+            .expect(&format!("token not found {:?}", t))
     }
 }
 
@@ -260,22 +269,17 @@ impl Environment {
             .insert(name.into(), value);
     }
 
-    fn get(&self, name: &str) -> Option<Value> {
-        self.scopes
-            .iter()
-            .rev()
-            .flat_map(|m| m.borrow().get(name).cloned())
-            .next()
+    fn get(&self, name: &str, level: usize) -> Option<Value> {
+        self.scopes[level].borrow().get(name).cloned()
     }
 
-    fn assign(&mut self, name: &str, value: Value) -> Option<Value> {
-        for scope in self.scopes.iter_mut().rev() {
-            if let Some(v) = scope.borrow_mut().get_mut(name) {
-                *v = value.clone();
-                return Some(value);
-            }
-        }
-        None
+    fn assign(&mut self, name: &str, level: usize, value: Value) -> Option<Value> {
+        *self.scopes[level]
+            .borrow_mut()
+            .get_mut(name)
+            .expect(&format!("{} not found at level {}", name, level)) = value.clone();
+
+        Some(value)
     }
 
     pub fn enter_scope(&mut self) {
