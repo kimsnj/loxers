@@ -163,10 +163,9 @@ impl Interpreter {
             | TokenKind::BangEqual
             | TokenKind::Equal
             | TokenKind::EqualEqual => {
-                let ordering = left.partial_cmp(&right).ok_or(LoxError::new(
-                    format!("Cannot compare {} and {}", left, right),
-                    &operator,
-                ))?;
+                let ordering = left.partial_cmp(&right).ok_or_else(|| {
+                    LoxError::new(format!("Cannot compare {} and {}", left, right), &operator)
+                })?;
                 Ok(Boolean(to_bool(&operator.kind, ordering)))
             }
 
@@ -210,7 +209,7 @@ impl Interpreter {
         self.bindings
             .get(&ptr)
             .cloned()
-            .expect(&format!("token not found {:?}", t))
+            .unwrap_or_else(|| panic!("token not found {:?}", t))
     }
 }
 

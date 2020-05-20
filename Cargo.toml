@@ -11,3 +11,6 @@ anyhow ="1.0"
 thiserror="1.0"
 phf = { version = "0.8.0", features = ["macros"] }
 rustyline = "6.1.1"
+
+[profile.release]
+debug = true
