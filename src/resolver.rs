@@ -1,5 +1,5 @@
 use crate::{
-    ast::{Expr, Stmt},
+    ast::{self, Expr, Stmt},
     error::LoxError,
     token::Token,
 };
@@ -55,14 +55,30 @@ impl Resolver {
             Stmt::Function(f) => {
                 self.env.declare(&f.name);
                 self.env.enter_scope();
-                for param in f.params.iter() {
-                    self.env.declare(&param.lexeme);
-                }
+                f.params.iter().for_each(|p| self.env.declare(&p.lexeme));
                 self.resolve_stmts(&f.body)?;
                 self.env.exit_scope();
             }
             Stmt::Return(r) => self.resolve_expr(&r.value)?,
+            Stmt::Class(c) => {
+                self.env.declare(&c.name.lexeme);
+                self.env.enter_scope();
+                self.env.declare("this");
+                for method in &c.methods {
+                    self.resolve_fn(&method)?;
+                }
+                self.env.exit_scope();
+            }
         }
+        Ok(())
+    }
+
+    fn resolve_fn(&mut self, f: &ast::Function) -> AnalysisRes {
+        self.env.declare(&f.name);
+        self.env.enter_scope();
+        f.params.iter().for_each(|p| self.env.declare(&p.lexeme));
+        self.resolve_stmts(&f.body)?;
+        self.env.exit_scope();
         Ok(())
     }
 
@@ -86,6 +102,12 @@ impl Resolver {
                     self.resolve_expr(arg)?;
                 }
             }
+            Expr::Get(g) => self.resolve_expr(&g.object)?,
+            Expr::Set(s) => {
+                self.resolve_expr(&s.object)?;
+                self.resolve_expr(&s.value)?
+            }
+            Expr::This(t) => self.resolve_var(t)?,
         }
         Ok(())
     }

@@ -2,8 +2,8 @@ use crate::ast::{self, Expr, Stmt};
 use crate::callable;
 use crate::error::{ControlFlow, LoxError};
 use crate::token::{Token, TokenKind};
-use crate::value::Value;
-use std::cell::RefCell;
+use crate::value::{Class, Instance, Value};
+use std::cell::{RefCell, RefMut};
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::ops::{Add, Div, Mul, Sub};
@@ -81,6 +81,9 @@ impl Interpreter {
                     self.evaluate(&r.value)?,
                 ))
             }
+            Stmt::Class(c) => self
+                .env
+                .declare(&c.name.lexeme, Class::new(c.as_ref(), self)),
         }
         Ok(())
     }
@@ -97,6 +100,9 @@ impl Interpreter {
             Expr::Variable(t) => self.read_var(&t),
             Expr::Assign(a) => self.evaluate_assignment(&a.name, &a.expr),
             Expr::Call(c) => self.evaluate_call(&c),
+            Expr::Get(g) => self.evaluate_get(&g),
+            Expr::Set(s) => self.evaluate_set(&s),
+            Expr::This(t) => self.read_var(&t),
         }
     }
 
@@ -188,6 +194,18 @@ impl Interpreter {
             },
             _ => unreachable!(),
         }
+    }
+
+    fn evaluate_get(&mut self, get: &ast::Get) -> EvaluationRes {
+        let value = self.evaluate(&get.object)?;
+        value.get(&get.name.lexeme).map_err(|e| e.into())
+    }
+
+    fn evaluate_set(&mut self, set: &ast::Set) -> EvaluationRes {
+        let mut object = self.evaluate(&set.object)?;
+        let mut instance: RefMut<Instance> = (&mut object).try_into()?;
+        let value = self.evaluate(&set.value)?;
+        Ok(instance.set(set.name.lexeme.clone(), value))
     }
 
     fn read_var(&self, t: &Token) -> EvaluationRes {

@@ -1,0 +1,20 @@
+class Hello {
+    say() {
+        print "Hello world";
+        return 42;
+    }
+    hello() {
+        return "Hello, " + this.name + "!";
+    }
+}
+
+print Hello;
+
+var h = Hello();
+print h;
+
+h.name = "world";
+print h.name;
+
+print h.say();
+print h.hello();

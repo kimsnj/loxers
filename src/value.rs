@@ -1,6 +1,11 @@
-use crate::ast::Expr;
-use crate::callable::{self, Callable};
-use crate::error::LoxError;
+use crate::{
+    ast::{self, Expr},
+    callable::{self, Callable},
+    error::LoxError,
+    interpreter::Interpreter,
+};
+use std::cell::{RefCell, RefMut};
+use std::collections::HashMap;
 use std::convert::{From, TryFrom};
 use std::rc::Rc;
 
@@ -11,6 +16,87 @@ pub(crate) enum Value {
     Number(f64),
     String(String),
     Callable(Rc<dyn Callable>),
+    Class(Rc<Class>),
+    Instance(Rc<RefCell<Instance>>),
+}
+
+impl Value {
+    pub fn get(self, field: &str) -> Result<Value, LoxError> {
+        if let Value::Instance(ref i) = self {
+            i.borrow()
+                .fields
+                .get(field)
+                .cloned()
+                .or_else(|| {
+                    i.borrow()
+                        .class
+                        .methods
+                        .get(field)
+                        .cloned()
+                        .map(|function| {
+                            Value::Callable(Rc::new(Method {
+                                function,
+                                instance: self.clone(),
+                            }))
+                        })
+                })
+                .ok_or_else(|| LoxError::msg(format!("no field {}", field)))
+        } else {
+            Err(LoxError::msg(format!("Expected instance found: {}", self)))
+        }
+    }
+}
+
+pub(crate) struct Class {
+    pub name: String,
+    pub methods: HashMap<String, Rc<callable::Function>>,
+}
+
+impl Class {
+    pub fn new(declaration: &ast::Class, interpreter: &Interpreter) -> Value {
+        let name = declaration.name.lexeme.clone();
+        let methods: HashMap<_, _> = declaration
+            .methods
+            .iter()
+            .cloned()
+            .map(|declaration| {
+                (
+                    declaration.name.clone(),
+                    Rc::new(callable::Function {
+                        declaration,
+                        interpreter: interpreter.clone(),
+                    }),
+                )
+            })
+            .collect();
+
+        Value::Class(Rc::new(Class { name, methods }))
+    }
+}
+
+#[derive(Clone)]
+pub(crate) struct Instance {
+    pub class: Rc<Class>,
+    fields: HashMap<String, Value>,
+}
+
+impl Instance {
+    pub fn new(class: Rc<Class>) -> Value {
+        Value::Instance(Rc::new(RefCell::new(Self {
+            class,
+            fields: HashMap::new(),
+        })))
+    }
+
+    pub fn set(&mut self, field: String, value: Value) -> Value {
+        self.fields.insert(field, value.clone());
+        value
+    }
+}
+
+pub(crate) struct Method {
+    pub instance: Value,
+    pub function: Rc<callable::Function>,
 }
 
 impl std::fmt::Display for Value {
@@ -27,6 +113,10 @@ impl std::fmt::Display for Value {
             }
             Value::String(s) => f.write_str(s),
             Value::Callable(c) => f.write_fmt(format_args!("<callable {}>", c.name())),
+            Value::Class(c) => f.write_fmt(format_args!("<class {}>", &c.name)),
+            Value::Instance(i) => {
+                f.write_fmt(format_args!("<instance {}>", &i.borrow().class.name))
+            }
         }
     }
 }
@@ -118,10 +208,20 @@ impl TryFrom<Value> for bool {
 impl<'a> TryFrom<&'a Value> for &'a dyn Callable {
     type Error = LoxError;
     fn try_from(value: &'a Value) -> Result<Self, Self::Error> {
-        if let Value::Callable(c) = value {
-            Ok(c.as_ref())
+        match value {
+            Value::Callable(c) => Ok(c.as_ref()),
+            Value::Class(c) => Ok(c),
+            _ => Err(LoxError::msg(format!("Expected callable found: {}", value))),
+        }
+    }
+}
+impl<'a> TryFrom<&'a mut Value> for RefMut<'a, Instance> {
+    type Error = LoxError;
+    fn try_from(value: &'a mut Value) -> Result<Self, Self::Error> {
+        if let Value::Instance(i) = value {
+            Ok(i.borrow_mut())
         } else {
-            Err(LoxError::msg(format!("Expected callable found: {}", value)))
+            Err(LoxError::msg(format!("Expected instance found: {}", value)))
         }
     }
 }

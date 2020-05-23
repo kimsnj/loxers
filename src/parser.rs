@@ -31,6 +31,7 @@ impl Parser {
     fn declaration(&mut self) -> StmtRes {
         match self.peek() {
             tk::Var => self.var_declaration(),
+            tk::Class => self.class_declaration(),
             tk::Fun => self.fun_declaration(),
             _ => self.statement(),
         }
@@ -81,6 +82,10 @@ impl Parser {
 
     fn fun_declaration(&mut self) -> StmtRes {
         self.expect(tk::Fun)?;
+        Ok(Stmt::Function(self.finish_fun_declaration()?))
+    }
+
+    fn finish_fun_declaration(&mut self) -> Result<Rc<ast::Function>, LoxError> {
         let name = self.expect(tk::Identifier)?;
         self.expect(tk::LeftParen)?;
         let mut params = Vec::new();
@@ -94,13 +99,23 @@ impl Parser {
         }
         self.expect(tk::RightParen)?;
         let body = self.block_stmts()?;
-        Ok(Stmt::Function({
-            Rc::new(ast::Function {
-                name: name.lexeme,
-                params,
-                body,
-            })
+        Ok(Rc::new(ast::Function {
+            name: name.lexeme,
+            params,
+            body,
         }))
+    }
+
+    fn class_declaration(&mut self) -> StmtRes {
+        self.expect(tk::Class)?;
+        let name = self.expect(tk::Identifier)?;
+        self.expect(tk::LeftBrace)?;
+        let mut methods = Vec::new();
+        while self.peek() != tk::RightBrace {
+            methods.push(self.finish_fun_declaration()?)
+        }
+        self.expect(tk::RightBrace)?;
+        Ok(Stmt::Class(Box::new(ast::Class { name, methods })))
     }
 
     fn print_stmt(&mut self) -> StmtRes {
@@ -196,13 +211,17 @@ impl Parser {
         let expr = self.or()?;
         if let Some(t) = self.matches(&[tk::Equal]) {
             let value = self.assignment()?;
-            if let Expr::Variable(ident) = expr {
-                Ok(Expr::Assign(Box::new(ast::Assignment {
+            match expr {
+                Expr::Variable(ident) => Ok(Expr::Assign(Box::new(ast::Assignment {
                     name: ident,
                     expr: value,
-                })))
-            } else {
-                Err(LoxError::new("Invalid assignment target".into(), &t))
+                }))),
+                Expr::Get(get) => Ok(Expr::Set(Box::new(ast::Set {
+                    name: get.name,
+                    object: get.object,
+                    value,
+                }))),
+                _ => Err(LoxError::new("Invalid assignment target".into(), &t)),
             }
         } else {
             Ok(expr)
@@ -279,8 +298,15 @@ impl Parser {
 
     fn call(&mut self) -> ExprRes {
         let mut expr = self.primary()?;
-        while self.matches(&[tk::LeftParen]).is_some() {
-            expr = self.finish_call(expr)?;
+        loop {
+            if self.matches(&[tk::LeftParen]).is_some() {
+                expr = self.finish_call(expr)?;
+            } else if self.matches(&[tk::Dot]).is_some() {
+                let name = self.expect(tk::Identifier)?;
+                expr = Expr::Get(Box::new(ast::Get { object: expr, name }))
+            } else {
+                break;
+            }
         }
         Ok(expr)
     }
@@ -311,6 +337,7 @@ impl Parser {
             tk::False => Ok(Expr::BoolLit(false)),
             tk::True => Ok(Expr::BoolLit(true)),
             tk::Nil => Ok(Expr::Nil),
+            tk::This => Ok(Expr::This(next)),
             tk::Identifier => Ok(Expr::Variable(next)),
             tk::LeftParen => {
                 let expr = Expr::Grouping(Box::new(self.expression()?));
@@ -396,6 +423,16 @@ mod tests {
             "hello()(42, <nil>)",
             &to_parsed_expr("hello()(42, nil)").unwrap()
         );
+
+        assert_eq!(
+            ".(.(egg, Token { kind: Identifier, lexeme: \"scramble\", line: 1 })(3), Token { kind: Identifier, lexeme: \"with\", line: 1 })(cheddar)",
+            &to_parsed_expr("egg.scramble(3).with(cheddar)").unwrap()
+        );
+
+        assert_eq!(
+            ".=(egg, Token { kind: Identifier, lexeme: \"amount\", line: 1 }, 3)",
+            &to_parsed_expr("egg.amount = 3").unwrap()
+        );
     }
 
     #[test]
@@ -439,6 +476,11 @@ mod tests {
         assert_eq!(
             "[printTwice(\"a\", [print(a), print(a)])]",
             &to_parsed_program("fun printTwice(a) { print(a); print(a); }").unwrap()
+        );
+
+        assert_eq!(
+            "[class(Token { kind: Identifier, lexeme: \"Answer\", line: 1 }, [say([return(42)])])]",
+            &to_parsed_program("class Answer { say() { return 42; } }").unwrap()
         );
     }
 }

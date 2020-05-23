@@ -12,6 +12,7 @@ pub(crate) enum Stmt {
     While(Box<While>),
     Function(Rc<Function>),
     Return(Box<Return>),
+    Class(Box<Class>),
 }
 
 #[derive(Clone)]
@@ -44,6 +45,12 @@ pub(crate) struct Return {
 }
 
 #[derive(Clone)]
+pub(crate) struct Class {
+    pub name: Token,
+    pub methods: Vec<Rc<Function>>,
+}
+
+#[derive(Clone)]
 pub(crate) enum Expr {
     StringLit(String),
     NumberLit(f64),
@@ -56,6 +63,9 @@ pub(crate) enum Expr {
     Variable(Token),
     Assign(Box<Assignment>),
     Call(Box<Call>),
+    Get(Box<Get>),
+    Set(Box<Set>),
+    This(Token),
 }
 
 #[derive(Clone)]
@@ -82,6 +92,19 @@ pub(crate) struct Call {
     pub callee: Expr,
     pub paren: Token,
     pub args: Vec<Expr>,
+}
+
+#[derive(Clone)]
+pub(crate) struct Get {
+    pub object: Expr,
+    pub name: Token,
+}
+
+#[derive(Clone)]
+pub(crate) struct Set {
+    pub object: Expr,
+    pub name: Token,
+    pub value: Expr,
 }
 
 impl Debug for Unary {
@@ -127,6 +150,27 @@ impl Debug for Call {
     }
 }
 
+impl Debug for Get {
+    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter
+            .debug_tuple(".")
+            .field(&self.object)
+            .field(&self.name)
+            .finish()
+    }
+}
+
+impl Debug for Set {
+    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter
+            .debug_tuple(".=")
+            .field(&self.object)
+            .field(&self.name)
+            .field(&self.value)
+            .finish()
+    }
+}
+
 impl Debug for Expr {
     fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
         use Expr::*;
@@ -143,6 +187,9 @@ impl Debug for Expr {
             Variable(t) => formatter.write_str(&t.lexeme),
             Assign(a) => a.fmt(formatter),
             Call(c) => c.fmt(formatter),
+            Get(g) => g.fmt(formatter),
+            Set(s) => s.fmt(formatter),
+            This(_) => formatter.write_str("this"),
         }
     }
 }
@@ -195,6 +242,16 @@ impl Debug for Return {
     }
 }
 
+impl Debug for Class {
+    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter
+            .debug_tuple("class")
+            .field(&self.name)
+            .field(&self.methods)
+            .finish()
+    }
+}
+
 impl Debug for Stmt {
     fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
         use Stmt::*;
@@ -208,6 +265,7 @@ impl Debug for Stmt {
             While(while_stmt) => while_stmt.fmt(formatter),
             Function(f) => f.fmt(formatter),
             Return(r) => r.fmt(formatter),
+            Class(c) => c.fmt(formatter),
         }
     }
 }
