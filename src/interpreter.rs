@@ -83,7 +83,7 @@ impl Interpreter {
             }
             Stmt::Class(c) => self
                 .env
-                .declare(&c.name.lexeme, Class::new(c.as_ref(), self)),
+                .declare(&c.name.lexeme, Class::new_value(c.as_ref(), self)),
         }
         Ok(())
     }
@@ -97,12 +97,11 @@ impl Interpreter {
             Expr::Unary(unary) => self.evaluate_unary(&unary),
             Expr::Binary(binary) => self.evaluate_binary(&binary),
             Expr::Logical(binary) => self.evaluate_logical(&binary),
-            Expr::Variable(t) => self.read_var(&t),
+            Expr::Variable(t) | Expr::This(t) => self.read_var(&t),
             Expr::Assign(a) => self.evaluate_assignment(&a.name, &a.expr),
             Expr::Call(c) => self.evaluate_call(&c),
             Expr::Get(g) => self.evaluate_get(&g),
             Expr::Set(s) => self.evaluate_set(&s),
-            Expr::This(t) => self.read_var(&t),
         }
     }
 
@@ -294,7 +293,7 @@ impl Environment {
         *self.scopes[level]
             .borrow_mut()
             .get_mut(name)
-            .expect(&format!("{} not found at level {}", name, level)) = value.clone();
+            .unwrap_or_else(|| panic!("{} not found at level {}", name, level)) = value.clone();
 
         Some(value)
     }

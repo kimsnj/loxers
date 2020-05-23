@@ -22,7 +22,7 @@ impl LoxError {
     pub fn msg(message: String) -> Self {
         Self {
             message,
-            ..Default::default()
+            ..Self::default()
         }
     }
 

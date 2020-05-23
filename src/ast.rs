@@ -180,8 +180,7 @@ impl Debug for Expr {
             StringLit(s) => s.fmt(formatter),
             NumberLit(n) => formatter.write_fmt(format_args!("{}", n)),
             Unary(u) => u.fmt(formatter),
-            Binary(b) => b.fmt(formatter),
-            Logical(b) => b.fmt(formatter),
+            Binary(b) | Logical(b) => b.fmt(formatter),
             BoolLit(b) => b.fmt(formatter),
             Nil => formatter.write_str("<nil>"),
             Variable(t) => formatter.write_str(&t.lexeme),
@@ -228,7 +227,7 @@ impl Debug for If {
 impl Debug for Function {
     fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
         let mut debug = formatter.debug_tuple(&self.name);
-        for param in self.params.iter() {
+        for param in &self.params {
             debug.field(&param.lexeme);
         }
         debug.field(&self.body);

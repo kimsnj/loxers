@@ -50,30 +50,30 @@ impl Parser {
     }
 
     fn block_stmts(&mut self) -> Result<Vec<Stmt>, LoxError> {
-        self.expect(tk::LeftBrace)?;
+        self.expect(&tk::LeftBrace)?;
         let mut stmts = Vec::new();
         while self.peek() != tk::RightBrace && self.peek() != tk::EOF {
             stmts.push(self.declaration()?);
         }
-        self.expect(tk::RightBrace)?;
+        self.expect(&tk::RightBrace)?;
         Ok(stmts)
     }
 
     fn block(&mut self) -> StmtRes {
-        self.block_stmts().map(|s| Stmt::Block(s))
+        self.block_stmts().map(Stmt::Block)
     }
 
     fn var_declaration(&mut self) -> StmtRes {
-        self.expect(tk::Var)?;
+        self.expect(&tk::Var)?;
         let name = self.advance();
         match name.kind {
             tk::Identifier => {
-                let init = if let Some(_) = self.matches(&[tk::Equal]) {
+                let init = if self.matches(&[tk::Equal]).is_some() {
                     Some(self.expression()?)
                 } else {
                     None
                 };
-                self.expect(tk::Semicolon)?;
+                self.expect(&tk::Semicolon)?;
                 Ok(Stmt::Var(ast::VarDeclaration { name, init }))
             }
             _ => Err(LoxError::new("Expected variable name".into(), &name)),
@@ -81,23 +81,23 @@ impl Parser {
     }
 
     fn fun_declaration(&mut self) -> StmtRes {
-        self.expect(tk::Fun)?;
+        self.expect(&tk::Fun)?;
         Ok(Stmt::Function(self.finish_fun_declaration()?))
     }
 
     fn finish_fun_declaration(&mut self) -> Result<Rc<ast::Function>, LoxError> {
-        let name = self.expect(tk::Identifier)?;
-        self.expect(tk::LeftParen)?;
+        let name = self.expect(&tk::Identifier)?;
+        self.expect(&tk::LeftParen)?;
         let mut params = Vec::new();
         if self.peek() != tk::RightParen {
             loop {
-                params.push(self.expect(tk::Identifier)?);
+                params.push(self.expect(&tk::Identifier)?);
                 if self.matches(&[tk::Comma]).is_none() {
                     break;
                 }
             }
         }
-        self.expect(tk::RightParen)?;
+        self.expect(&tk::RightParen)?;
         let body = self.block_stmts()?;
         Ok(Rc::new(ast::Function {
             name: name.lexeme,
@@ -107,29 +107,29 @@ impl Parser {
     }
 
     fn class_declaration(&mut self) -> StmtRes {
-        self.expect(tk::Class)?;
-        let name = self.expect(tk::Identifier)?;
-        self.expect(tk::LeftBrace)?;
+        self.expect(&tk::Class)?;
+        let name = self.expect(&tk::Identifier)?;
+        self.expect(&tk::LeftBrace)?;
         let mut methods = Vec::new();
         while self.peek() != tk::RightBrace {
             methods.push(self.finish_fun_declaration()?)
         }
-        self.expect(tk::RightBrace)?;
+        self.expect(&tk::RightBrace)?;
         Ok(Stmt::Class(Box::new(ast::Class { name, methods })))
     }
 
     fn print_stmt(&mut self) -> StmtRes {
-        self.expect(tk::Print)?;
+        self.expect(&tk::Print)?;
         let value = self.expression()?;
-        self.expect(tk::Semicolon)?;
+        self.expect(&tk::Semicolon)?;
         Ok(Stmt::Print(value))
     }
 
     fn if_stmt(&mut self) -> StmtRes {
-        self.expect(tk::If)?;
-        self.expect(tk::LeftParen)?;
+        self.expect(&tk::If)?;
+        self.expect(&tk::LeftParen)?;
         let condition = self.expression()?;
-        self.expect(tk::RightParen)?;
+        self.expect(&tk::RightParen)?;
         let then_branch = self.statement()?;
         let else_branch = if self.matches(&[tk::Else]).is_some() {
             Some(self.statement()?)
@@ -144,18 +144,18 @@ impl Parser {
     }
 
     fn while_stmt(&mut self) -> StmtRes {
-        self.expect(tk::While)?;
-        self.expect(tk::LeftParen)?;
+        self.expect(&tk::While)?;
+        self.expect(&tk::LeftParen)?;
         let condition = self.expression()?;
-        self.expect(tk::RightParen)?;
+        self.expect(&tk::RightParen)?;
         let body = self.statement()?;
         Ok(Stmt::While(Box::new(ast::While { condition, body })))
     }
 
     fn for_stmt(&mut self) -> StmtRes {
-        self.expect(tk::For)?;
+        self.expect(&tk::For)?;
 
-        self.expect(tk::LeftParen)?;
+        self.expect(&tk::LeftParen)?;
         let initialization = match self.peek() {
             tk::Var => Some(self.var_declaration()?),
             tk::Semicolon => {
@@ -166,7 +166,7 @@ impl Parser {
         };
 
         let condition = self.expression()?;
-        self.expect(tk::Semicolon)?;
+        self.expect(&tk::Semicolon)?;
 
         let increment = if self.peek() == tk::Semicolon {
             self.advance();
@@ -174,12 +174,12 @@ impl Parser {
         } else {
             Some(Stmt::Expression(self.expression()?))
         };
-        self.expect(tk::RightParen)?;
+        self.expect(&tk::RightParen)?;
 
         let body = self.statement()?;
         let nil_statement = Stmt::Expression(Expr::Nil);
         Ok(Stmt::Block(vec![
-            initialization.unwrap_or(nil_statement.clone()),
+            initialization.unwrap_or_else(|| nil_statement.clone()),
             Stmt::While(Box::new(ast::While {
                 condition,
                 body: Stmt::Block(vec![body, increment.unwrap_or(nil_statement)]),
@@ -188,18 +188,18 @@ impl Parser {
     }
 
     fn return_stmt(&mut self) -> StmtRes {
-        let keyword = self.expect(tk::Return)?;
+        let keyword = self.expect(&tk::Return)?;
         let mut value = Expr::Nil;
         if self.matches(&[tk::Semicolon]).is_none() {
             value = self.expression()?;
-            self.expect(tk::Semicolon)?;
+            self.expect(&tk::Semicolon)?;
         }
         Ok(Stmt::Return(Box::new(ast::Return { keyword, value })))
     }
 
     fn expr_stmt(&mut self) -> StmtRes {
         let expr = self.expression()?;
-        self.expect(tk::Semicolon)?;
+        self.expect(&tk::Semicolon)?;
         Ok(Stmt::Expression(expr))
     }
 
@@ -302,7 +302,7 @@ impl Parser {
             if self.matches(&[tk::LeftParen]).is_some() {
                 expr = self.finish_call(expr)?;
             } else if self.matches(&[tk::Dot]).is_some() {
-                let name = self.expect(tk::Identifier)?;
+                let name = self.expect(&tk::Identifier)?;
                 expr = Expr::Get(Box::new(ast::Get { object: expr, name }))
             } else {
                 break;
@@ -321,7 +321,7 @@ impl Parser {
                 }
             }
         }
-        let paren = self.expect(tk::RightParen)?;
+        let paren = self.expect(&tk::RightParen)?;
         Ok(Expr::Call(Box::new(ast::Call {
             callee,
             args,
@@ -341,7 +341,7 @@ impl Parser {
             tk::Identifier => Ok(Expr::Variable(next)),
             tk::LeftParen => {
                 let expr = Expr::Grouping(Box::new(self.expression()?));
-                self.expect(tk::RightParen)?;
+                self.expect(&tk::RightParen)?;
                 Ok(expr)
             }
             _ => Err(LoxError {
@@ -374,9 +374,9 @@ impl Parser {
         })
     }
 
-    fn expect(&mut self, kind: tk) -> Result<Token, LoxError> {
+    fn expect(&mut self, kind: &tk) -> Result<Token, LoxError> {
         let token = self.advance();
-        if token.kind == kind {
+        if token.kind == *kind {
             Ok(token)
         } else {
             Err(LoxError::new(format!("Expected {:?}", kind), &token))

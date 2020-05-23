@@ -53,7 +53,7 @@ pub(crate) struct Class {
 }
 
 impl Class {
-    pub fn new(declaration: &ast::Class, interpreter: &Interpreter) -> Value {
+    pub fn new_value(declaration: &ast::Class, interpreter: &Interpreter) -> Value {
         let name = declaration.name.lexeme.clone();
         let methods: HashMap<_, _> = declaration
             .methods
@@ -81,7 +81,7 @@ pub(crate) struct Instance {
 }
 
 impl Instance {
-    pub fn new(class: Rc<Class>) -> Value {
+    pub fn new_value(class: Rc<Class>) -> Value {
         Value::Instance(Rc::new(RefCell::new(Self {
             class,
             fields: HashMap::new(),

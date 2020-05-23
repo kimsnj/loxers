@@ -79,7 +79,7 @@ impl Callable for Rc<Class> {
         &self.name
     }
     fn call(&self, _: Vec<Value>) -> Result<Value, LoxError> {
-        Ok(Instance::new(self.clone()))
+        Ok(Instance::new_value(self.clone()))
     }
 }
 

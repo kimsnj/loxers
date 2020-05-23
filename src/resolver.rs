@@ -24,7 +24,7 @@ impl Resolver {
     }
 
     fn resolve_stmts(&mut self, stmts: &[Stmt]) -> AnalysisRes {
-        stmts.into_iter().map(|s| self.resolve_stmt(s)).collect()
+        stmts.iter().map(|s| self.resolve_stmt(s)).collect()
     }
 
     fn resolve_stmt(&mut self, stmt: &Stmt) -> AnalysisRes {
@@ -98,7 +98,7 @@ impl Resolver {
             }
             Expr::Call(c) => {
                 self.resolve_expr(&c.callee)?;
-                for arg in c.args.iter() {
+                for arg in &c.args {
                     self.resolve_expr(arg)?;
                 }
             }
