@@ -72,6 +72,10 @@ impl Class {
 
         Value::Class(Rc::new(Class { name, methods }))
     }
+
+    pub fn get_init(&self) -> Option<Rc<callable::Function>> {
+        self.methods.get("init").cloned()
+    }
 }
 
 #[derive(Clone)]

@@ -73,13 +73,21 @@ impl Callable for Function {
 
 impl Callable for Rc<Class> {
     fn arity(&self) -> usize {
-        0
+        self.get_init().map(|f| f.arity()).unwrap_or(0)
     }
     fn name(&self) -> &str {
         &self.name
     }
-    fn call(&self, _: Vec<Value>) -> Result<Value, LoxError> {
-        Ok(Instance::new_value(self.clone()))
+    fn call(&self, args: Vec<Value>) -> Result<Value, LoxError> {
+        let instance = Instance::new_value(self.clone());
+        if let Some(function) = self.get_init() {
+            Method {
+                instance: instance.clone(),
+                function,
+            }
+            .call(args)?;
+        }
+        Ok(instance)
     }
 }
 

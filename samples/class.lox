@@ -1,20 +1,19 @@
 class Hello {
-    say() {
-        print "Hello world";
-        return 42;
+    init(name) {
+        this.name = name;
     }
-    hello() {
-        return "Hello, " + this.name + "!";
+
+    say() {
+         print ("Hello, " + this.name + "!");
     }
 }
 
 print Hello;
-
-var h = Hello();
+var h = Hello("World");
 print h;
+print "";
 
-h.name = "world";
-print h.name;
+h.say();
 
-print h.say();
-print h.hello();
+h.name = "Lox";
+h.say();
